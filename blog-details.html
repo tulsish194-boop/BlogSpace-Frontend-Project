@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog Details | BlogSpace</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="index.html">BlogSpace</a>
+      <a href="dashboard.html">Dashboard</a>
+    </nav>
+  </header>
+
+  <main class="blog-detail-container">
+    <a href="index.html">← Back to blogs</a>
+
+    <article id="blog-detail">
+      <p>Loading blog...</p>
+    </article>
+  </main>
+
+  <script>
+    async function loadBlogDetails() {
+      const blogDetail = document.getElementById("blog-detail");
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("id");
+
+      if (!id) {
+        blogDetail.textContent = "No blog ID was provided.";
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          "http://localhost:5000/api/blogs/" + encodeURIComponent(id)
+        );
+
+        const blog = await response.json();
+
+        if (!response.ok) {
+          blogDetail.textContent = blog.message || "Blog not found.";
+          return;
+        }
+
+        const title = document.createElement("h1");
+        title.textContent = blog.title;
+
+        const category = document.createElement("p");
+        category.textContent = blog.category || "General";
+
+        const author = document.createElement("p");
+        author.textContent = "By " + (blog.author || "BlogSpace User");
+
+        const content = document.createElement("div");
+        content.style.whiteSpace = "pre-wrap";
+        content.textContent = blog.content;
+
+        blogDetail.replaceChildren(title, category, author, content);
+      } catch (error) {
+        blogDetail.textContent =
+          "Unable to load the blog. Please check that the backend is running.";
+      }
+    }
+
+    loadBlogDetails();
+  </script>
+</body>
+</html>
