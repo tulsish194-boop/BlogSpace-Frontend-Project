@@ -68,9 +68,11 @@ async function loadPostsFromMongoDB() {
 // ========================================
 
 
+
 function postCard(post, withDelete = false) {
   const content = post.content || "";
   const excerpt = post.excerpt || content.slice(0, 140);
+  const postId = String(post.id || post._id);
 
   return `
     <article class="post-card">
@@ -81,26 +83,37 @@ function postCard(post, withDelete = false) {
       <h3>${escapeHTML(post.title)}</h3>
 
       <p>${escapeHTML(excerpt)}</p>
+
       <a
-  class="read-more"
-  href="blog-details.html?id=${encodeURIComponent(String(post.id || post._id))}"
->
-  Read story →
-</a>
+        class="read-more"
+        href="blog-details.html?id=${encodeURIComponent(postId)}"
+      >
+        Read story →
+      </a>
 
       ${
         withDelete
-          ? `<button
-               class="delete-button"
-               onclick="deletePost('${escapeHTML(String(post.id))}')"
-             >
-               Delete post
-             </button>`
+          ? `
+            <a
+              class="button"
+              href="create-blog.html?id=${encodeURIComponent(postId)}"
+            >
+              Edit post
+            </a>
+
+            <button
+              class="delete-button"
+              onclick="deletePost('${escapeHTML(postId)}')"
+            >
+              Delete post
+            </button>
+          `
           : ""
       }
     </article>
   `;
 }
+
 
 function renderPosts() {
   const posts = getPosts();
@@ -306,18 +319,74 @@ loadPostsFromMongoDB();
   // ======================================
   // CREATE BLOG FORM - Backend API
   // ======================================
+  
+  // ======================================
+  // CREATE / EDIT BLOG FORM - Backend API
+  // ======================================
 
   const blogForm = document.getElementById("blog-form");
 
   if (blogForm) {
+    const params = new URLSearchParams(window.location.search);
+    const editId = params.get("id");
+
+    const message = document.getElementById("blog-message");
+    const submitButton = blogForm.querySelector("button[type='submit']");
+
+    // Change the form title and button when editing
+    if (editId) {
+      document.querySelector("h1").textContent = "Edit blog post";
+
+      if (submitButton) {
+        submitButton.textContent = "Update post";
+      }
+
+      message.textContent = "Loading blog post...";
+
+      // Load the existing blog post
+      fetch(`http://localhost:5000/api/blogs/${encodeURIComponent(editId)}`)
+        .then(async (response) => {
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.message || "Blog not found");
+          }
+
+          return data.blog || data;
+        })
+        .then((blog) => {
+          document.getElementById("blog-title").value =
+            blog.title || "";
+
+          document.getElementById("blog-category").value =
+            blog.category || "Technology";
+
+          document.getElementById("blog-excerpt").value =
+            blog.excerpt || "";
+
+          document.getElementById("blog-content").value =
+            blog.content || "";
+
+          message.textContent = "Blog loaded. You can edit it now.";
+        })
+        .catch((error) => {
+          console.error("Error loading blog:", error);
+
+          message.textContent =
+            "Could not load blog. Please check your backend.";
+        });
+    }
+
+    // Handle form submission
     blogForm.addEventListener("submit", async (event) => {
       event.preventDefault();
 
-      const message = document.getElementById("blog-message");
-
       const title = document.getElementById("blog-title").value.trim();
+
       const category = document.getElementById("blog-category").value;
+
       const excerpt = document.getElementById("blog-excerpt").value.trim();
+
       const content = document.getElementById("blog-content").value.trim();
 
       if (!title || !excerpt || !content) {
@@ -325,68 +394,65 @@ loadPostsFromMongoDB();
         return;
       }
 
-      message.textContent = "Publishing your post...";
+      message.textContent = editId
+        ? "Updating your post..."
+        : "Publishing your post...";
 
       try {
-        const response = await fetch("http://localhost:5000/api/blogs", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            title,
-            content: excerpt + "\n\n" + content,
-            author: "BlogSpace User",
-            category,
-            excerpt
-          })
-        });
+        const blogData = {
+          title,
+          content: content,
+          author: "BlogSpace User",
+          category,
+          excerpt
+        };
+
+        // Use PUT when editing
+        // Use POST when creating
+        const response = await fetch(
+          editId
+            ? `http://localhost:5000/api/blogs/${encodeURIComponent(editId)}`
+            : "http://localhost:5000/api/blogs",
+          {
+            method: editId ? "PUT" : "POST",
+
+            headers: {
+              "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify(blogData)
+          }
+        );
 
         const data = await response.json();
 
         if (!response.ok) {
           message.textContent =
-            data.message || "Could not publish your post.";
+            data.message ||
+            (editId
+              ? "Could not update blog."
+              : "Could not publish blog.");
+
           return;
         }
 
-        // Save the successful API response locally so the
-        // existing dashboard and home page can display it.
-        const savedBlog = {
-          id: String(data.blog.id),
-          title: data.blog.title,
-          content: data.blog.content,
-          author: data.blog.author,
-          category,
-          excerpt,
-          createdAt: new Date().toISOString()
-        };
-
-        const posts = getPosts();
-
-        // Avoid adding the same post twice
-        const alreadyExists = posts.some(
-          (post) => String(post.id) === savedBlog.id
-        );
-
-        if (!alreadyExists) {
-          savePosts([...posts, savedBlog]);
-        }
-
-        message.textContent = "Blog post published successfully!";
+        message.textContent = editId
+          ? "Blog updated successfully!"
+          : "Blog published successfully!";
 
         blogForm.reset();
 
-        // Open dashboard after publishing
+        // Return to dashboard
         setTimeout(() => {
           window.location.href = "dashboard.html";
         }, 1000);
 
       } catch (error) {
+        console.error("Blog form error:", error);
+
         message.textContent =
-          "Cannot connect to the backend. Make sure your server is running.";
+          "Cannot connect to backend. Make sure your server is running.";
       }
     });
-  }
-
+}
 });
