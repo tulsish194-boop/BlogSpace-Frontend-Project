@@ -66,28 +66,7 @@ async function loadPostsFromMongoDB() {
 // ========================================
 // Blog Display Functions
 // ========================================
-async function loadPostsFromMongoDB() {
-  try {
-    const response = await fetch("http://localhost:5000/api/blogs");
 
-    if (!response.ok) {
-      throw new Error("Failed to fetch blog posts.");
-    }
-
-    const posts = await response.json();
-
-    // Convert MongoDB's _id field to the id used by the frontend.
-    const formattedPosts = posts.map((post) => ({
-      ...post,
-      id: String(post._id)
-    }));
-
-    savePosts(formattedPosts);
-    renderPosts();
-  } catch (error) {
-    console.error("Error loading blogs from MongoDB:", error);
-  }
-}
 
 function postCard(post, withDelete = false) {
   const content = post.content || "";
