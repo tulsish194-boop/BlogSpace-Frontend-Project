@@ -41,6 +41,11 @@ function toggleMenu() {
     nav.classList.toggle("open");
   }
 }
+function logout() {
+  sessionStorage.removeItem("blogspace-user");
+  sessionStorage.removeItem("blogspace-token");
+  window.location.href = "login.html";
+}
 async function loadPostsFromMongoDB() {
   try {
     const response = await fetch("http://localhost:5000/api/blogs");
@@ -60,6 +65,43 @@ async function loadPostsFromMongoDB() {
     renderPosts();
   } catch (error) {
     console.error("Error loading blogs from MongoDB:", error);
+  }
+}
+async function loadMyBlogsFromMongoDB() {
+  const token = sessionStorage.getItem("blogspace-token");
+
+  if (!token) {
+    window.location.href = "login.html";
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      "http://localhost:5000/api/my-blogs",
+      {
+        headers: {
+          "Authorization": "Bearer " + token
+        }
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      alert(data.message || "Could not load your blogs.");
+      return;
+    }
+
+    const formattedPosts = data.map((post) => ({
+      ...post,
+      id: String(post._id)
+    }));
+
+    savePosts(formattedPosts);
+    renderPosts();
+
+  } catch (error) {
+    console.error("Error loading your blogs:", error);
   }
 }
 
@@ -170,11 +212,14 @@ async function deletePost(id) {
 
   try {
     const response = await fetch(
-      `http://localhost:5000/api/blogs/${encodeURIComponent(id)}`,
-      {
-        method: "DELETE"
-      }
-    );
+  `http://localhost:5000/api/blogs/${encodeURIComponent(id)}`,
+  {
+    method: "DELETE",
+    headers: {
+      "Authorization": "Bearer " + sessionStorage.getItem("blogspace-token")
+    }
+  }
+);
 
     const data = await response.json();
 
@@ -205,9 +250,25 @@ async function deletePost(id) {
 // ========================================
 
 document.addEventListener("DOMContentLoaded", () => {
+  const user = JSON.parse(sessionStorage.getItem("blogspace-user") || "{}");
 
-  // Load blog posts from MongoDB
-loadPostsFromMongoDB();
+const usernameElement = document.getElementById("profile-username");
+const emailElement = document.getElementById("profile-email");
+
+if (usernameElement) {
+  usernameElement.textContent = user.username || "Not available";
+}
+
+if (emailElement) {
+  emailElement.textContent = user.email || "Not available";
+}
+
+// Load blog posts based on the current page
+if (document.getElementById("dashboard-posts")) {
+  loadMyBlogsFromMongoDB();
+} else {
+  loadPostsFromMongoDB();
+}
 
   // ======================================
   // REGISTER FORM - Backend API
@@ -302,6 +363,11 @@ loadPostsFromMongoDB();
         sessionStorage.setItem(
           "blogspace-user",
           JSON.stringify(data.user)
+        );
+        // Save JWT token for authenticated requests
+       sessionStorage.setItem(
+            "blogspace-token",
+             data.token
         );
 
         // Redirect to dashboard after successful login
@@ -416,8 +482,9 @@ loadPostsFromMongoDB();
           {
             method: editId ? "PUT" : "POST",
 
-            headers: {
-              "Content-Type": "application/json"
+           headers: {
+                "Content-Type": "application/json",
+                 "Authorization": "Bearer " + sessionStorage.getItem("blogspace-token")
             },
 
             body: JSON.stringify(blogData)

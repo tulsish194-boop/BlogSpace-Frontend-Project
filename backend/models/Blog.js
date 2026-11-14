@@ -15,6 +15,11 @@ const blogSchema = new mongoose.Schema(
       type: String,
       default: "BlogSpace User"
     },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    default: null
+    },
     category: {
       type: String,
       default: "General"

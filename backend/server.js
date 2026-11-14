@@ -7,13 +7,40 @@ require("dotenv").config();
 const connectDB = require("./db");
 const User = require("./models/User");
 const Blog = require("./models/Blog");
-
+const jwt = require("jsonwebtoken");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  console.log("REQUEST RECEIVED:", req.method, req.url);
+  next();
+});
+
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (!token) {
+    return res.status(401).json({
+      message: "Access token required."
+    });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({
+        message: "Invalid or expired token."
+      });
+    }
+
+    req.user = user;
+    next();
+  });
+}
+
 
 // ========================================
 // HOME ROUTE
@@ -28,6 +55,25 @@ app.get("/", (req, res) => {
 // ========================================
 // READ: GET ALL BLOG POSTS
 // ========================================
+// ========================================
+// READ: GET BLOGS OF LOGGED-IN USER
+// ========================================
+console.log("MY-BLOGS ROUTE REGISTERED");
+app.get("/api/my-blogs", authenticateToken, async (req, res) => {
+  try {
+    const blogs = await Blog.find({
+      user: req.user.id
+    }).sort({ createdAt: -1 });
+
+    res.json(blogs);
+  } catch (error) {
+    console.error("Get my blogs error:", error.message);
+
+    res.status(500).json({
+      message: "Failed to retrieve your blog posts."
+    });
+  }
+});
 app.get("/api/blogs", async (req, res) => {
   try {
     const blogs = await Blog.find().sort({ createdAt: -1 });
@@ -75,7 +121,7 @@ app.get("/api/blogs/:id", async (req, res) => {
 // ========================================
 // CREATE: CREATE A BLOG POST
 // ========================================
-app.post("/api/blogs", async (req, res) => {
+app.post("/api/blogs", authenticateToken, async (req, res) => {
   try {
     const { title, content, author, category, excerpt } = req.body;
 
@@ -93,6 +139,7 @@ app.post("/api/blogs", async (req, res) => {
     const blog = await Blog.create({
       title: title.trim(),
       content: content.trim(),
+      user: req.user.id,
       author:
         typeof author === "string" && author.trim()
           ? author.trim()
@@ -123,7 +170,7 @@ app.post("/api/blogs", async (req, res) => {
 // ========================================
 // UPDATE: UPDATE A BLOG POST
 // ========================================
-app.put("/api/blogs/:id", async (req, res) => {
+app.put("/api/blogs/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { title, content, author, category, excerpt } = req.body;
@@ -144,9 +191,12 @@ app.put("/api/blogs/:id", async (req, res) => {
         message: "Title and content are required."
       });
     }
-
-    const updatedBlog = await Blog.findByIdAndUpdate(
-      id,
+   const updatedBlog = await Blog.findOneAndUpdate(
+  {
+    _id: id,
+    user: req.user.id
+  },
+    
       {
         title: title.trim(),
         content: content.trim(),
@@ -191,7 +241,7 @@ app.put("/api/blogs/:id", async (req, res) => {
 // ========================================
 // DELETE: DELETE A BLOG POST
 // ========================================
-app.delete("/api/blogs/:id", async (req, res) => {
+app.delete("/api/blogs/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -201,7 +251,10 @@ app.delete("/api/blogs/:id", async (req, res) => {
       });
     }
 
-    const deletedBlog = await Blog.findByIdAndDelete(id);
+    const deletedBlog = await Blog.findOneAndDelete({
+  _id: id,
+  user: req.user.id
+});
 
     if (!deletedBlog) {
       return res.status(404).json({
@@ -297,6 +350,7 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    
 
     if (
       typeof email !== "string" ||
@@ -330,14 +384,26 @@ app.post("/api/login", async (req, res) => {
       });
     }
 
-    res.json({
-      message: "Login successful!",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email
-      }
-    });
+const token = jwt.sign(
+  {
+    id: user._id,
+    username: user.username,
+    email: user.email
+  },
+  process.env.JWT_SECRET,
+  { expiresIn: "1h" }
+);
+
+res.json({
+  message: "Login successful!",
+  token,
+  user: {
+    id: user._id,
+    username: user.username,
+    email: user.email
+  }
+});
+
   } catch (error) {
     console.error("Login error:", error.message);
 
