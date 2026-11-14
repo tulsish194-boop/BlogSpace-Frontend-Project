@@ -83,7 +83,7 @@ Configure your MongoDB connection using the `MONGODB_URI` environment variable.
 Start the backend:
 
 ```bash
-node server.js
+npm.cmd start
 ```
 
 The backend runs at:
